@@ -47,11 +47,10 @@
             overlays = [ (import inputs.rust-overlay) ];
           };
 
-          packages.default = self'.packages.example;
+          packages.default = self'.packages.mini-paints-collection;
           devShells.default = self'.devShells.stable;
 
-          packages.example = (rustPackage "foobar");
-          packages.example-base = (rustPackage "");
+          packages.mini-paints-collection = (rustPackage "");
 
           devShells.nightly = (mkDevShell (pkgs.rust-bin.selectLatestNightlyWith
             (toolchain: toolchain.default)));
