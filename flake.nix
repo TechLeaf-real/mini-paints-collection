@@ -48,7 +48,7 @@
           };
 
           packages.default = self'.packages.example;
-          devShells.default = self'.devShells.nightly;
+          devShells.default = self'.devShells.stable;
 
           packages.example = (rustPackage "foobar");
           packages.example-base = (rustPackage "");
