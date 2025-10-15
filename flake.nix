@@ -1,74 +1,62 @@
 {
-  description = "mini-paints-collection dev flake";
-
   inputs = {
-    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1"; # unstable Nixpkgs
-    fenix = {
-      url = "https://flakehub.com/f/nix-community/fenix/0.1";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
-  outputs =
-    { self, ... }@inputs:
+  outputs = inputs:
+    inputs.flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [ "x86_64-linux" ];
+      perSystem = { config, self', pkgs, lib, system, ... }:
+        let
+          runtimeDeps = with pkgs; [ alsa-lib speechd ];
+          buildDeps = with pkgs; [ pkg-config rustPlatform.bindgenHook ];
+          devDeps = with pkgs; [ gdb ];
 
-    let
-      supportedSystems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "x86_64-darwin"
-        "aarch64-darwin"
-      ];
-      forEachSupportedSystem =
-        f:
-        inputs.nixpkgs.lib.genAttrs supportedSystems (
-          system:
-          f {
-            pkgs = import inputs.nixpkgs {
-              inherit system;
-              overlays = [
-                inputs.self.overlays.default
-              ];
+          cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+          msrv = cargoToml.package.rust-version;
+
+          rustPackage = features:
+            (pkgs.makeRustPlatform {
+              cargo = pkgs.rust-bin.stable.latest.minimal;
+              rustc = pkgs.rust-bin.stable.latest.minimal;
+            }).buildRustPackage {
+              inherit (cargoToml.package) name version;
+              src = ./.;
+              cargoLock.lockFile = ./Cargo.lock;
+              buildFeatures = features;
+              buildInputs = runtimeDeps;
+              nativeBuildInputs = buildDeps;
+              # Uncomment if your cargo tests require networking or otherwise
+              # don't play nicely with the Nix build sandbox:
+              # doCheck = false;
             };
-          }
-        );
-    in
-    {
-      overlays.default = final: prev: {
-        rustToolchain =
-          with inputs.fenix.packages.${prev.stdenv.hostPlatform.system};
-          combine (
-            with stable;
-            [
-              clippy
-              rustc
-              cargo
-              rustfmt
-              rust-src
-            ]
-          );
-      };
 
-      devShells = forEachSupportedSystem (
-        { pkgs }:
-        {
-          default = pkgs.mkShellNoCC {
-            packages = with pkgs; [
-              rustToolchain
-              openssl
-              pkg-config
-              cargo-deny
-              cargo-edit
-              cargo-watch
-              rust-analyzer
-            ];
-
-            env = {
-              # Required by rust-analyzer
-              RUST_SRC_PATH = "${pkgs.rustToolchain}/lib/rustlib/src/rust/library";
+          mkDevShell = rustc:
+            pkgs.mkShell {
+              shellHook = ''
+                export RUST_SRC_PATH=${pkgs.rustPlatform.rustLibSrc}
+              '';
+              buildInputs = runtimeDeps;
+              nativeBuildInputs = buildDeps ++ devDeps ++ [ rustc ];
             };
+        in {
+          _module.args.pkgs = import inputs.nixpkgs {
+            inherit system;
+            overlays = [ (import inputs.rust-overlay) ];
           };
-        }
-      );
+
+          packages.default = self'.packages.example;
+          devShells.default = self'.devShells.nightly;
+
+          packages.example = (rustPackage "foobar");
+          packages.example-base = (rustPackage "");
+
+          devShells.nightly = (mkDevShell (pkgs.rust-bin.selectLatestNightlyWith
+            (toolchain: toolchain.default)));
+          devShells.stable = (mkDevShell pkgs.rust-bin.stable.latest.default);
+          devShells.msrv = (mkDevShell pkgs.rust-bin.stable.${msrv}.default);
+        };
     };
 }
