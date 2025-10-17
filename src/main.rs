@@ -1,22 +1,28 @@
 use gtk4 as gtk;
 use gtk::prelude::*;
-use gtk::{glib, Application, ApplicationWindow};
+use gtk::{glib, Application, ApplicationWindow, Button};
 
 fn main() -> glib::ExitCode {
-    let app = Application::builder()
-        .application_id("org.example.HelloWorld")
+    let application = Application::builder()
+        .application_id("com.example.FirstGtkApp")
         .build();
 
-    app.connect_activate(|app| {
+    application.connect_activate(|app| {
         let window = ApplicationWindow::builder()
             .application(app)
-            .default_width(320)
-            .default_height(200)
-            .title("Hello World!")
+            .title("First GTK Program")
+            .default_width(350)
+            .default_height(70)
             .build();
+
+        let button = Button::with_label("Click me!");
+        button.connect_clicked(|_| {
+            eprintln!("Clicked!");
+        });
+        window.set_child(Some(&button));
 
         window.present();
     });
 
-    app.run()
+    application.run()
 }
